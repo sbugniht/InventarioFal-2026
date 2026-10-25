@@ -1,0 +1,27 @@
+# Ambiente Python (si ricrea su ogni macchina)
+venv/
+__pycache__/
+*.pyc
+
+# Certificati: contengono la chiave privata della CA locale, ogni PC genera i suoi
+certs/
+
+# Impostazioni della singola macchina (in git c'è solo config.example.json)
+config.json
+
+# Dati aziendali e database: restano sul PC e sul NAS
+dati/articoli.csv
+*.db
+*.db-wal
+*.db-shm
+backup/
+
+# Registrazioni audio: non vanno mai conservate
+*.m4a
+*.wav
+*.webm
+*.ogg
+*.mp3
+
+.DS_Store
+.vscode/

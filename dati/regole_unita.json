@@ -1,0 +1,72 @@
+{
+    "_spiegazione": "Unita' di salvataggio dei campi e, per ogni unita' di misura dell'articolo, quali campi servono e come si calcola il totale. 'da_verificare': true = proposta non ancora confermata. 'inventariabile': false = articoli esclusi dalla ricerca (es. servizi a ore).",
+
+    "salvataggio": {
+        "_spiegazione": "In che unita' ogni campo viene salvato nel database (dal vecchio modulo Altervista).",
+        "da_verificare": true,
+        "spessore": "mm",
+        "larghezza": "cm",
+        "lunghezza": "m",
+        "trasversali": "m"
+    },
+
+    "unita": {
+        "Pz": {
+            "descrizione": "pezzi",
+            "obbligatori": ["pezzi"],
+            "totale": null,
+            "da_verificare": true
+        },
+        "PZS": {
+            "descrizione": "pezzi",
+            "obbligatori": ["pezzi"],
+            "totale": null,
+            "da_verificare": true
+        },
+        "Ml": {
+            "descrizione": "metri lineari",
+            "obbligatori": ["pezzi", "lunghezza"],
+            "totale": "pezzi * lunghezza",
+            "da_verificare": true
+        },
+        "Mq": {
+            "descrizione": "metri quadri",
+            "obbligatori": ["pezzi", "larghezza", "lunghezza"],
+            "totale": "pezzi * larghezza/100 * lunghezza",
+            "da_verificare": true
+        },
+        "Mc": {
+            "descrizione": "metri cubi",
+            "obbligatori": ["pezzi", "spessore", "larghezza", "lunghezza"],
+            "totale": "pezzi * spessore/1000 * larghezza/100 * lunghezza",
+            "da_verificare": true
+        },
+        "KG": {
+            "descrizione": "chilogrammi",
+            "etichetta_pezzi": "Quantità (kg)",
+            "obbligatori": ["pezzi"],
+            "totale": null,
+            "da_verificare": true
+        },
+        "Ton": {
+            "descrizione": "tonnellate",
+            "etichetta_pezzi": "Quantità (t)",
+            "obbligatori": ["pezzi"],
+            "totale": null,
+            "da_verificare": true
+        },
+        "Ore": {
+            "descrizione": "servizi a ore",
+            "inventariabile": false,
+            "obbligatori": ["pezzi"],
+            "totale": null,
+            "da_verificare": true
+        },
+        "": {
+            "descrizione": "unità mancante nel catalogo: trattata come pezzi",
+            "obbligatori": ["pezzi"],
+            "totale": null,
+            "da_verificare": true
+        }
+    }
+}

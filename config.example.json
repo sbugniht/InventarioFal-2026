@@ -1,0 +1,17 @@
+{
+    "whisper_backend": "auto",
+    "whisper_modello": "large-v3-turbo",
+    "whisper_minuti_inattivita": 5,
+    "llm_attivo": true,
+    "llm_modello": "qwen2.5:3b",
+    "llm_keep_alive": "2m",
+    "priorita_bassa": true,
+    "thread_cpu": 4,
+    "porta": 8000,
+    "database": "inventario.db",
+    "minuti_doppione": 10,
+    "trascrizioni_giorni": 90,
+    "backup_cartella": null,
+    "backup_minuti": 60,
+    "backup_giorni": 30
+}

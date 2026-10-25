@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Inventario</title>
+  <link rel="stylesheet" href="/static/stile.css">
+</head>
+<body>
+  <div class="barra">
+    <span class="titolo">Inventario</span>
+    <label class="chip" for="zona" style="margin:0">Zona
+      <select id="zona" style="min-height:36px;width:auto;border:none;padding:0 4px;background:transparent"></select>
+    </label>
+    <span class="chip ok" id="coda" title="Righe salvate sul tablet e non ancora inviate al server">✓ inviato</span>
+    <span class="chip" id="nome"></span>
+    <button class="btn piccolo" id="esci">Esci</button>
+  </div>
+
+  <main>
+    <section class="scheda">
+      <button class="grande" id="grande">🎤 Registra</button>
+      <div class="stato" id="stato">Premi Registra e di' articolo, quantità e misure.</div>
+      <div class="azioni-secondarie" id="azioni-pronto">
+        <button class="btn" id="manuale">✍️ Inserisci a mano</button>
+        <button class="btn" id="segnala">Articolo mancante?</button>
+      </div>
+    </section>
+
+    <section class="scheda nascosto" id="verifica">
+      <div class="avviso nascosto" id="avviso"></div>
+      <p class="trascrizione nascosto" id="trascrizione"></p>
+
+      <div id="articolo-scelto"></div>
+      <div class="alternative" id="alternative"></div>
+      <p><button class="btn piccolo" id="cambia-articolo">🔍 Cerca un altro articolo</button></p>
+      <div class="nascosto" id="ricerca">
+        <input type="search" id="cerca" placeholder="Codice o parole della descrizione" autocomplete="off">
+        <div class="alternative risultati-ricerca" id="risultati"></div>
+      </div>
+
+      <div class="griglia" id="campi" style="margin-top:12px"></div>
+      <p><button class="btn piccolo nascosto" id="altre-misure">+ altre misure</button></p>
+      <p id="totale" class="tenue"></p>
+      <p class="tenue nascosto" id="conversioni"></p>
+      <label for="note">Note</label>
+      <input type="text" id="note" autocomplete="off">
+      <p class="azioni-secondarie" style="margin-top:16px">
+        <button class="btn pericolo" id="scarta">Scarta</button>
+      </p>
+    </section>
+
+    <section class="scheda">
+      <h2>Le tue righe di oggi</h2>
+      <div id="oggi"><span class="tenue">Nessuna riga.</span></div>
+    </section>
+  </main>
+
+  <dialog id="dialogo-segnala">
+    <h2>Articolo non presente nell'elenco</h2>
+    <p class="tenue">Descrivilo: l'admin lo aggiungerà al catalogo.</p>
+    <textarea id="testo-segnala" placeholder="Es. tavole abete 4x12 L=5m, pacco con etichetta rossa"></textarea>
+    <p class="errore" id="errore-segnala"></p>
+    <p class="azioni-secondarie">
+      <button class="btn" id="chiudi-segnala">Annulla</button>
+      <button class="btn primario" id="invia-segnala">Invia</button>
+    </p>
+  </dialog>
+
+<script src="/static/comune.js"></script>
+<script src="/static/operatore.js"></script>
+</body>
+</html>

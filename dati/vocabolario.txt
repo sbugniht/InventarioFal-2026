@@ -1,0 +1,10 @@
+# Parole suggerite a Whisper perché le scriva giuste. Una o più per riga, max ~150 parole in tutto.
+# Le righe che iniziano con # sono ignorate.
+articolo, pezzi, spessore, larghezza, lunghezza, trasversali, zona, note
+Roll-Tech, Euro-Standard, rosso marrone
+Performant, Performance Strong, Construct, tutto filetto
+portalistello, gancio fermacolmo
+Ecowall, S-Wall, X-Lam, pareti casa
+abete, larice, pino, rovere, tronchi, reggiate, prismate
+Uso Fiume, Uso Trieste, C24, lamellare, GL24H
+Polmone, Capannina

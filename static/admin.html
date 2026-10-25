@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Inventario · Admin</title>
+  <link rel="stylesheet" href="/static/stile.css">
+  <style>main { max-width: 1300px; }</style>
+</head>
+<body>
+  <div class="barra">
+    <span class="titolo">Inventario · Admin</span>
+    <span class="chip" id="conteggio-righe"></span>
+    <button class="btn piccolo" id="esci">Esci</button>
+  </div>
+  <main>
+    <nav class="schede" id="schede" style="margin-bottom:16px">
+      <button data-scheda="righe" class="attiva">Inventario</button>
+      <button data-scheda="notifiche">Da controllare <span class="badge nascosto" id="badge"></span></button>
+      <button data-scheda="articoli">Articoli</button>
+      <button data-scheda="utenti">Utenti</button>
+      <button data-scheda="zone">Zone</button>
+      <button data-scheda="chiusura">Esporta e chiudi</button>
+    </nav>
+
+    <!-- Inventario in corso -->
+    <section class="scheda" id="scheda-righe">
+      <div class="filtri">
+        <input type="search" id="filtro-cerca" placeholder="Cerca articolo (codice o descrizione)">
+        <select id="filtro-utente"><option value="">Tutti gli utenti</option></select>
+        <select id="filtro-zona"><option value="">Tutte le zone</option></select>
+      </div>
+      <div class="tabella-contenitore">
+        <table>
+          <thead><tr>
+            <th data-ordina="creata">Data ▾</th><th data-ordina="utente">Utente</th><th data-ordina="zona">Zona</th>
+            <th data-ordina="articolo">Articolo</th><th class="num">Pezzi</th><th class="num">Sp. mm</th>
+            <th class="num">Larg. cm</th><th class="num">Lung. m</th><th class="num">Trasv.</th><th>Note</th>
+          </tr></thead>
+          <tbody id="righe"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Notifiche: restano finché non sono segnate come gestite -->
+    <section class="scheda nascosto" id="scheda-notifiche">
+      <label style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+        <input type="checkbox" id="mostra-gestite"> Mostra anche quelle già gestite
+      </label>
+      <div id="notifiche"></div>
+    </section>
+
+    <!-- Articoli -->
+    <section class="scheda nascosto" id="scheda-articoli">
+      <div class="filtri">
+        <input type="search" id="cerca-articoli" placeholder="Cerca per codice o descrizione">
+        <button class="btn primario" id="nuovo-articolo" style="flex:0 0 auto">+ Nuovo articolo</button>
+      </div>
+      <p class="tenue">Le misure con <span class="etichetta">auto</span> sono state lette dalla descrizione: controllale e
+        conferma. Vuote = vanno dette ogni volta.</p>
+      <div class="tabella-contenitore">
+        <table>
+          <thead><tr><th>Codice</th><th>Descrizione</th><th>Unità</th><th class="num">Sp. mm</th><th class="num">Larg. cm</th>
+            <th class="num">Lung. m</th><th class="num">Trasv.</th><th>Stato</th></tr></thead>
+          <tbody id="articoli"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Utenti -->
+    <section class="scheda nascosto" id="scheda-utenti">
+      <form class="filtri" id="form-utente">
+        <input type="text" id="nuovo-nome" placeholder="Nome" required>
+        <select id="nuovo-ruolo"><option value="operatore">Operatore (PIN 4 cifre)</option><option value="admin">Admin (password)</option></select>
+        <input type="password" id="nuovo-pin" placeholder="PIN o password" required autocomplete="new-password">
+        <button class="btn primario" style="flex:0 0 auto">+ Aggiungi</button>
+      </form>
+      <p class="errore" id="errore-utenti"></p>
+      <div id="utenti"></div>
+    </section>
+
+    <!-- Zone -->
+    <section class="scheda nascosto" id="scheda-zone">
+      <form class="filtri" id="form-zona">
+        <input type="text" id="nuova-zona" placeholder="Nome della zona (es. Polmone)" required>
+        <button class="btn primario" style="flex:0 0 auto">+ Aggiungi</button>
+      </form>
+      <div id="zone"></div>
+    </section>
+
+    <!-- Esporta e chiudi -->
+    <section class="scheda nascosto" id="scheda-chiusura">
+      <h2>Esporta</h2>
+      <p class="azioni-secondarie" style="justify-content:flex-start">
+        <a class="btn primario" href="/api/admin/export/totali" style="text-decoration:none;display:inline-flex;align-items:center">⬇ Totali per articolo (CSV)</a>
+        <a class="btn" href="/api/admin/export/righe" style="text-decoration:none;display:inline-flex;align-items:center">⬇ Tutte le righe (CSV)</a>
+      </p>
+      <h2 style="margin-top:24px">Chiudi l'inventario</h2>
+      <p class="tenue">Svuota l'elenco per il prossimo inventario. "Archivia" conserva le righe con la data di chiusura;
+        "Cancella" le elimina definitivamente.</p>
+      <p class="azioni-secondarie" style="justify-content:flex-start">
+        <button class="btn primario" id="archivia">Archivia con data</button>
+        <button class="btn pericolo" id="cancella">Cancella</button>
+      </p>
+    </section>
+  </main>
+
+  <!-- Dettaglio / modifica di una riga -->
+  <dialog id="dialogo-riga">
+    <h2 id="riga-titolo"></h2>
+    <p class="trascrizione" id="riga-trascrizione"></p>
+    <p class="tenue" id="riga-info"></p>
+    <div class="griglia" id="riga-campi"></div>
+    <label for="riga-note" style="margin-top:12px">Note</label>
+    <input type="text" id="riga-note">
+    <label for="riga-zona" style="margin-top:12px">Zona</label>
+    <select id="riga-zona"></select>
+    <p class="errore" id="riga-errore"></p>
+    <p class="azioni-secondarie">
+      <button class="btn pericolo" id="riga-elimina">Elimina</button>
+      <button class="btn" id="riga-chiudi">Chiudi</button>
+      <button class="btn primario" id="riga-salva">Salva</button>
+    </p>
+  </dialog>
+
+  <!-- Articolo nuovo / modifica -->
+  <dialog id="dialogo-articolo">
+    <h2 id="articolo-titolo"></h2>
+    <div class="griglia">
+      <div><label for="art-codice">Codice</label><input type="text" id="art-codice"></div>
+      <div><label for="art-unita">Unità</label><input type="text" id="art-unita" list="unita-note"></div>
+    </div>
+    <datalist id="unita-note"></datalist>
+    <label for="art-descrizione" style="margin-top:12px">Descrizione</label>
+    <input type="text" id="art-descrizione">
+    <p class="tenue" style="margin:12px 0 4px">Misure fisse (vuote = vanno dette ogni volta)</p>
+    <div class="griglia">
+      <div><label for="art-spessore">Spessore (mm)</label><input type="text" inputmode="decimal" id="art-spessore"></div>
+      <div><label for="art-larghezza">Larghezza (cm)</label><input type="text" inputmode="decimal" id="art-larghezza"></div>
+      <div><label for="art-lunghezza">Lunghezza (m)</label><input type="text" inputmode="decimal" id="art-lunghezza"></div>
+      <div><label for="art-trasversali">Trasversali (m)</label><input type="text" inputmode="decimal" id="art-trasversali"></div>
+    </div>
+    <label style="display:flex;gap:8px;align-items:center;margin-top:12px"><input type="checkbox" id="art-verificate"> Misure verificate</label>
+    <label for="art-sinonimi" style="margin-top:12px">Nomi usati a voce (separati da |)</label>
+    <input type="text" id="art-sinonimi" placeholder="es. xlam 240|pareti casa 240">
+    <label style="display:flex;gap:8px;align-items:center;margin-top:12px"><input type="checkbox" id="art-attivo"> Attivo</label>
+    <p class="errore" id="articolo-errore"></p>
+    <p class="azioni-secondarie">
+      <button class="btn" id="articolo-chiudi">Annulla</button>
+      <button class="btn primario" id="articolo-salva">Salva</button>
+    </p>
+  </dialog>
+
+<script src="/static/comune.js"></script>
+<script src="/static/admin.js"></script>
+</body>
+</html>

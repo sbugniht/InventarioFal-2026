@@ -1,0 +1,3 @@
+# Una zona per riga. Le righe che iniziano con # sono ignorate.
+Polmone
+Capannina
