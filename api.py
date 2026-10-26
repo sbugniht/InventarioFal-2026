@@ -414,13 +414,18 @@ async def admin_utenti(request, u):
     return JSONResponse({"ok": True})
 
 
+ARTICOLI_PER_PAGINA = 100
+
+
 @api("admin")
 async def admin_articoli(request, u):
     if request.method == "GET":
+        # A pagine: la schermata admin chiede le successive mentre si scorre
         q = request.query_params.get("cerca", "")
+        da = max(0, int(request.query_params.get("da", 0)))
         return JSONResponse(db.tutti(
-            "SELECT * FROM articoli WHERE codice LIKE ? OR descrizione LIKE ? ORDER BY codice LIMIT 300",
-            (f"%{q}%", f"%{q}%")))
+            "SELECT * FROM articoli WHERE codice LIKE ? OR descrizione LIKE ? ORDER BY codice LIMIT ? OFFSET ?",
+            (f"%{q}%", f"%{q}%", ARTICOLI_PER_PAGINA, da)))
     if request.method == "DELETE":
         articolo_id = int(request.path_params["id"])
         # Anche le righe archiviate puntano all'articolo: eliminarlo le lascerebbe senza articolo
@@ -451,7 +456,8 @@ async def admin_articoli(request, u):
                   "trasversali=?, misure_auto=?, sinonimi=?, attivo=?, modificato=? WHERE id = ?",
                   (*valori, int(articolo_id)))
     ricostruisci_indice()
-    return JSONResponse({"ok": True})
+    # L'articolo come è stato salvato: la schermata aggiorna la riga senza ricaricare l'elenco
+    return JSONResponse({"ok": True, "articolo": db.uno("SELECT * FROM articoli WHERE codice = ?", (codice,))})
 
 
 @api("admin")

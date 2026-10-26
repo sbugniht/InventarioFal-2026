@@ -126,14 +126,45 @@ $("#riga-elimina").addEventListener("click", async () => {
 });
 
 // --- Articoli ------------------------------------------------------------------------
-let articoli = [];
-async function caricaArticoli() {
-  articoli = await api("/api/admin/articoli?cerca=" + encodeURIComponent($("#cerca-articoli").value));
-  $("#articoli").innerHTML = articoli.map(r => `<tr data-id="${r.id}">
+// A pagine da 100 (come api.py): la successiva arriva quando si scorre in fondo all'elenco
+const PAGINA_ARTICOLI = 100;
+let articoli = [], articoliFiniti = false, articoliInCorso = false, ricercaArticoli = 0;
+const fondoArticoli = new IntersectionObserver(voci => { if (voci[0].isIntersecting) altriArticoli(); },
+                                               { rootMargin: "400px" });
+fondoArticoli.observe($("#fine-articoli"));
+
+function rigaArticolo(r) {
+  return `<tr data-id="${r.id}">
       <td><b>${esc(r.codice)}</b></td><td>${esc(r.descrizione)}</td><td>${esc(r.unita)}</td>
       ${["spessore", "larghezza", "lunghezza", "trasversali"].map(c => `<td class="num">${formatoNumero(r[c])}</td>`).join("")}
       <td>${r.misure_auto ? '<span class="etichetta">auto</span> ' : ""}${r.attivo ? "" : '<span class="tenue">disattivo</span>'}</td>
-    </tr>`).join("") || `<tr><td colspan="8" class="tenue">Nessun articolo.</td></tr>`;
+    </tr>`;
+}
+
+async function caricaArticoli() {  // da capo: scheda aperta, nuova ricerca, articolo salvato o eliminato
+  ricercaArticoli++;
+  articoli = []; articoliFiniti = false; articoliInCorso = false;
+  $("#articoli").innerHTML = "";
+  await altriArticoli();
+}
+async function altriArticoli() {
+  if (articoliFiniti || articoliInCorso) return;
+  articoliInCorso = true;
+  const questa = ricercaArticoli;
+  let pagina;
+  try {
+    pagina = await api(`/api/admin/articoli?cerca=${encodeURIComponent($("#cerca-articoli").value)}&da=${articoli.length}`);
+  } finally {
+    if (questa === ricercaArticoli) articoliInCorso = false;
+  }
+  if (questa !== ricercaArticoli) return;  // nel frattempo è cambiata la ricerca
+  articoli.push(...pagina);
+  articoliFiniti = pagina.length < PAGINA_ARTICOLI;
+  $("#articoli").insertAdjacentHTML("beforeend", pagina.map(rigaArticolo).join(""));
+  if (!articoli.length) $("#articoli").innerHTML = `<tr><td colspan="8" class="tenue">Nessun articolo.</td></tr>`;
+  // Se il fondo è ancora in vista (schermo alto) l'osservatore non scatta di nuovo: lo si riavvia
+  fondoArticoli.unobserve($("#fine-articoli"));
+  fondoArticoli.observe($("#fine-articoli"));
 }
 let attesaArticoli;
 $("#cerca-articoli").addEventListener("input", () => { clearTimeout(attesaArticoli); attesaArticoli = setTimeout(caricaArticoli, 300); });
@@ -164,7 +195,10 @@ $("#articolo-elimina").addEventListener("click", async () => {
   if (!confirm(`Eliminare l'articolo ${r.codice}? Non si può annullare.`)) return;
   try {
     await api(`/api/admin/articoli/${r.id}`, { method: "DELETE" });
-    $("#dialogo-articolo").close(); caricaArticoli();
+    $("#dialogo-articolo").close();
+    // Si toglie solo la riga: l'elenco resta dov'era
+    articoli = articoli.filter(x => x.id !== r.id);
+    $(`#articoli tr[data-id="${r.id}"]`)?.remove();
   } catch (e) { $("#articolo-errore").textContent = e.message; }
 });
 $("#articolo-salva").addEventListener("click", async () => {
@@ -177,8 +211,13 @@ $("#articolo-salva").addEventListener("click", async () => {
   }
   try {
     const r = a.articoloAperto;
-    await api(r ? `/api/admin/articoli/${r.id}` : "/api/admin/articoli", { method: r ? "PUT" : "POST", json: dati });
-    $("#dialogo-articolo").close(); caricaArticoli();
+    const salvato = (await api(r ? `/api/admin/articoli/${r.id}` : "/api/admin/articoli",
+                               { method: r ? "PUT" : "POST", json: dati })).articolo;
+    $("#dialogo-articolo").close();
+    if (!r) { caricaArticoli(); return; }  // nuovo: va al suo posto in ordine di codice
+    // Modificato: si aggiorna solo la sua riga, senza tornare in cima all'elenco
+    articoli = articoli.map(x => x.id === salvato.id ? salvato : x);
+    $(`#articoli tr[data-id="${salvato.id}"]`).outerHTML = rigaArticolo(salvato);
   } catch (e) { $("#articolo-errore").textContent = e.message; }
 });
 
