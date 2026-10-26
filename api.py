@@ -6,6 +6,7 @@ import io
 import json
 import os
 import secrets
+import shutil
 import tempfile
 import time
 
@@ -182,6 +183,15 @@ async def catalogo(request, u):
 
 
 # --- Voce -----------------------------------------------------------------------
+CAMPIONI = os.path.join(BASE_DIR, "campioni")
+
+
+def _tieni_campione(u) -> bool:
+    """Solo per l'utente di prova: l'audio resta in campioni/ per confrontare i modelli."""
+    nome = CONFIG.get("utente_campioni")
+    return bool(nome) and u["nome"].lower() == nome.lower()
+
+
 @api("operatore")
 async def voce(request, u):
     form = await request.form()
@@ -190,14 +200,29 @@ async def voce(request, u):
     with tempfile.NamedTemporaryFile(suffix=estensione, delete=False) as f:
         f.write(await audio.read())
         percorso = f.name
+    campione, testo, risultato = None, "", None
     try:
         testo = await asyncio.to_thread(trascrizione.trascrivi, percorso)
     finally:
-        os.remove(percorso)  # l'audio non viene mai conservato
-    if not testo:
-        raise Errore(422, "Non ho sentito niente, riprova.")
-    zone = db.tutti("SELECT id, nome FROM zone WHERE attiva = 1")
-    return JSONResponse(await asyncio.to_thread(inventario.analizza, testo, indice(), zone))
+        if _tieni_campione(u):
+            os.makedirs(CAMPIONI, exist_ok=True)
+            campione = os.path.join(CAMPIONI, f"{datetime.datetime.now():%Y%m%d-%H%M%S}-{secrets.token_hex(3)}")
+            shutil.move(percorso, campione + estensione)
+        else:
+            os.remove(percorso)  # l'audio non viene mai conservato (tranne per l'utente di prova)
+    try:
+        if not testo:
+            raise Errore(422, "Non ho sentito niente, riprova.")
+        zone = db.tutti("SELECT id, nome FROM zone WHERE attiva = 1")
+        risultato = await asyncio.to_thread(inventario.analizza, testo, indice(), zone)
+        return JSONResponse(risultato)
+    finally:
+        if campione:
+            # Risposta data al tablet: la riga salvata dopo (stessa trascrizione) è quella giusta
+            with open(campione + ".json", "w", encoding="utf-8") as f:
+                json.dump({"creato": db.adesso(), "utente": u["nome"], "audio": os.path.basename(campione) + estensione,
+                           "whisper": CONFIG["whisper_modello"], "llm": CONFIG["llm_modello"] if CONFIG["llm_attivo"]
+                           else None, "testo": testo, "risultato": risultato}, f, ensure_ascii=False, indent=1)
 
 
 @api("operatore")
@@ -396,6 +421,16 @@ async def admin_articoli(request, u):
         return JSONResponse(db.tutti(
             "SELECT * FROM articoli WHERE codice LIKE ? OR descrizione LIKE ? ORDER BY codice LIMIT 300",
             (f"%{q}%", f"%{q}%")))
+    if request.method == "DELETE":
+        articolo_id = int(request.path_params["id"])
+        # Anche le righe archiviate puntano all'articolo: eliminarlo le lascerebbe senza articolo
+        usato = db.uno("SELECT COUNT(*) AS n FROM righe WHERE articolo_id = ?", (articolo_id,))["n"]
+        if usato:
+            raise Errore(400, f"Articolo usato in {usato} righe di inventario: non si può eliminare, "
+                              "togli la spunta \"Attivo\" per nasconderlo")
+        db.esegui("DELETE FROM articoli WHERE id = ?", (articolo_id,))
+        ricostruisci_indice()
+        return JSONResponse({"ok": True})
     dati = await request.json()
     codice = str(dati.get("codice") or "").strip().upper()
     if not codice:
@@ -524,7 +559,7 @@ ROUTES = [
     Route("/api/admin/utenti", admin_utenti, methods=["GET", "POST"]),
     Route("/api/admin/utenti/{id:int}", admin_utenti, methods=["PUT"]),
     Route("/api/admin/articoli", admin_articoli, methods=["GET", "POST"]),
-    Route("/api/admin/articoli/{id:int}", admin_articoli, methods=["PUT"]),
+    Route("/api/admin/articoli/{id:int}", admin_articoli, methods=["PUT", "DELETE"]),
     Route("/api/admin/zone", admin_zone, methods=["GET", "POST"]),
     Route("/api/admin/zone/{id:int}", admin_zone, methods=["PUT"]),
     Route("/api/admin/export/{tipo:str}", admin_export),

@@ -30,6 +30,7 @@ DEFAULT = {
     "database": "inventario.db",
     "minuti_doppione": 10,                # stessa riga entro N minuti -> avviso "possibile doppione"
     "trascrizioni_giorni": 90,            # giorni dopo la chiusura dell'inventario prima di cancellarle
+    "utente_campioni": "Prova",           # solo per questo utente l'audio resta in campioni/ (None = mai)
 
     # --- Backup (spento finché non si indica la cartella del NAS) ---
     "backup_cartella": None,              # es. "\\\\NAS\\inventario\\backup" oppure "/Volumes/home/backup"

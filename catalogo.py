@@ -149,9 +149,10 @@ class Catalogo:
                     voce["fisse"][campo] = valore
                 unita = r.get(f"parlato_{campo}", "")
                 if unita:
-                    if unita not in UNITA_LUNGHEZZA:
+                    # "auto": sotto 40 cm, da 40 in su mm (travi, vedi inventario.unita_detta)
+                    if unita not in UNITA_LUNGHEZZA and unita != "auto":
                         self.problemi.append(f"misure_articoli.csv riga {n}: unità '{unita}' sconosciuta "
-                                             f"(usa mm, cm o m)")
+                                             f"(usa mm, cm, m o auto)")
                     else:
                         voce["parlato"][campo] = unita
             if codice.endswith("*"):

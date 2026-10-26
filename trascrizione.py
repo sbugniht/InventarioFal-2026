@@ -23,6 +23,21 @@ MODELLI_MLX = {
 }
 
 
+def _dll_nvidia():
+    """Windows: le DLL CUDA dei pacchetti nvidia-* (requirements.txt) non sono nel percorso di ricerca."""
+    if platform.system() != "Windows":
+        return
+    import glob
+    import sysconfig
+    for cartella in glob.glob(os.path.join(sysconfig.get_paths()["purelib"], "nvidia", "*", "bin")):
+        os.add_dll_directory(cartella)
+        # ctranslate2 carica cuBLAS/cuDNN al primo uso con LoadLibrary, che guarda il PATH
+        os.environ["PATH"] = cartella + os.pathsep + os.environ.get("PATH", "")
+
+
+_dll_nvidia()
+
+
 def _scegli_backend() -> str:
     scelta = CONFIG["whisper_backend"]
     if scelta != "auto":

@@ -2,4 +2,12 @@ codice;spessore;larghezza;lunghezza;trasversali;parlato_spessore;parlato_larghez
 PARETICASA240;240;;;;;;;;xlam 240|x-lam 240;spessore dalla descrizione (sp. 240 mm) - DA VERIFICARE
 PARETICASA60;60;;;;;;;;xlam 60|x-lam 60;spessore dalla descrizione (sp. 60 mm) - DA VERIFICARE
 LAM4024H;;;;;;;;;lamellare 40 24|lamellare gl24h;ESEMPIO: sezione variabile, tutte le misure vanno dette
-UF*;;;;;;;;;uso fiume abete;ESEMPIO di famiglia: tutti i codici che iniziano con UF
+UF*;;;;;auto;;;;uso fiume abete;ESEMPIO di famiglia: tutti i codici che iniziano con UF
+LAM*;;;;;auto;;;;;travi: spessore sotto 40 in cm (12 = 12 cm), da 40 in su in mm (120)
+BIL*;;;;;auto;;;;;travi: spessore sotto 40 in cm, da 40 in su in mm
+UT*;;;;;auto;;;;;travi: spessore sotto 40 in cm, da 40 in su in mm
+TRONCHI*;;;;;auto;;;;;travi: spessore sotto 40 in cm, da 40 in su in mm
+GIUNTATO;;;;;auto;;;;;travi: spessore sotto 40 in cm, da 40 in su in mm
+MURALI;;;;;auto;;;;;travi: spessore sotto 40 in cm, da 40 in su in mm
+MULARI;;;;;auto;;;;;travi: spessore sotto 40 in cm, da 40 in su in mm
+CASTAGNO;;;;;auto;;;;;travi: spessore sotto 40 in cm, da 40 in su in mm

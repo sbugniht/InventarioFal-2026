@@ -36,6 +36,7 @@ Una riga per articolo **o per famiglia** (codice che finisce con `*`, es. `UF*` 
 - Colonne `spessore`, `larghezza`, `lunghezza`, `trasversali`: valore **fisso** dell'articolo (nell'unità di
   salvataggio). **Vuoto = va detto ogni volta** (es. `LAM4024H`, sezione variabile).
 - Colonne `parlato_*`: unità in cui la gente dice quel numero se non specifica (`mm`, `cm`, `m`).
+  `auto` (per le travi): sotto 40 sono cm ("spessore 12" = 12 cm), da 40 in su mm ("spessore 120").
   Vuoto = quella di `regole_unita.json`.
 - Colonna `sinonimi`: come chiamano l'articolo a voce, separati da `|` (es. `rolltech nero|roll tech nero`).
 - [ ] Prendere le misure dal **CRM** dove esistono.

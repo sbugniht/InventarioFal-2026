@@ -24,8 +24,14 @@ def _numero(tok: str) -> str:
     return str(int(n)) if n.is_integer() else str(n)
 
 
+SCELTE = {"i": "prima", "ii": "seconda", "iii": "terza", "iv": "quarta", "v": "quinta"}
+
+
 def parole(testo: str) -> list[str]:
     t = _senza_accenti(testo.lower())
+    # Scelta del legname come si dice: "I^" -> prima, "III^-IV^" -> terza quarta, "IV-V" -> quarta quinta
+    t = re.sub(r"\b(iii|ii|iv|i|v)\^", lambda m: f" {SCELTE[m.group(1)]} ", t)
+    t = re.sub(r"\b(iv)-(v)\b", " quarta quinta ", t)
     # Misure a coppie come parola unica: "8,0x240" e "8 per 240" -> "8x240" (distingue 6x6 da 2x6)
     coppie = [f"{_numero(a)}x{_numero(b)}"
               for a, b in re.findall(r"(\d+(?:[.,]\d+)?)\s*(?:[x×*]|per)\s*(?=(\d+(?:[.,]\d+)?))", t)]
@@ -56,6 +62,9 @@ class Indice:
             self.doc.append((toks, codice))
             for t in toks:
                 df[t] = df.get(t, 0) + 1
+        self.per_codice = {codice: a for a, (_, codice) in zip(articoli, self.doc)}
+        # Codici che sono anche parole delle descrizioni ("pino", "murali"): detti, non bastano a scegliere
+        self.codici_parola = {codice for _, codice in self.doc if df.get(codice, 0) > 1}
         n = max(len(articoli), 1)
         self.idf = {t: math.log(1 + n / c) for t, c in df.items()}
         self.lunghezza_media = sum(len(d[0]) for d in self.doc) / n
@@ -88,11 +97,37 @@ class Indice:
                     domanda.setdefault(simile, 0.7)
         return domanda
 
+    def codice_detto(self, testo: str):
+        """Codice dettato anche a pezzi: "M40-60-40", "L2, 304016", "L'AM40 24H", "a 3,25 e 40,20".
+        Unisce fino a 6 pezzi consecutivi; vale il codice intero, oppure la parte finale ("40-24H")
+        se è di un solo articolo. Torna (articolo, (inizio, fine) nel testo) oppure None."""
+        pezzi = [m for m in re.finditer(r"[a-z0-9]+", testo.lower()) if m.group() != "e"]
+        migliore = None  # (intero, lunghezza, articolo, inizio, fine)
+        for i in range(len(pezzi)):
+            unito = ""
+            for j in range(i, min(i + 6, len(pezzi))):
+                unito += pezzi[j].group()
+                if len(unito) < 4 or not any(c.isdigit() for c in unito):
+                    continue
+                if unito in self.per_codice:
+                    trovato = (1, len(unito), self.per_codice[unito])
+                elif len(unito) >= 5 and (len(unito) >= 6 or not unito.isdigit()):
+                    finali = [a for c, a in self.per_codice.items() if c.endswith(unito)]
+                    if len(finali) != 1:
+                        continue
+                    trovato = (0, len(unito), finali[0])
+                else:
+                    continue
+                if migliore is None or trovato[:2] > migliore[:2]:
+                    migliore = (*trovato, pezzi[i].start(), pezzi[j].end())
+        return (migliore[2], (migliore[3], migliore[4])) if migliore else None
+
     def cerca(self, testo: str, n: int = 6) -> list[dict]:
         domanda = self._parole_domanda(testo)
         if not domanda:
             return []
         k1, b = 1.2, 0.3
+        numeri_detti = any(t[0].isdigit() for t in domanda)
         risultati = []
         for articolo, (toks, codice) in zip(self.articoli, self.doc):
             punteggio = 0.0
@@ -100,10 +135,11 @@ class Indice:
                 if tok in toks:
                     norm = (k1 + 1) / (1 + k1 * (1 - b + b * len(toks) / self.lunghezza_media))
                     punteggio += peso * self.idf.get(tok, 0) * norm
-            if codice in domanda:
+            if codice in domanda and codice not in self.codici_parola:
                 punteggio += 20  # codice detto per intero: quasi certo
-            if punteggio > 0:
+            if punteggio > 0 and numeri_detti:
                 # Numeri dell'articolo non detti: "6 per 6" deve preferire 6x6 a 2x6
+                # (se non si dice nessun numero, le descrizioni lunghe non vanno penalizzate)
                 non_detti = sum(1 for t in toks if t[0].isdigit() and t not in domanda)
                 punteggio -= 0.4 * non_detti
             if punteggio > 0:

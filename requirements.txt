@@ -4,6 +4,7 @@ python-multipart>=0.0.32
 cryptography>=50
 ollama>=0.6
 faster-whisper>=1.2
+av<19  # av 19 non accetta più metadata_errors, che faster-whisper 1.2.1 passa ancora
 
 # Solo Mac Apple Silicon: Whisper accelerato con MLX
 mlx-whisper>=0.4; sys_platform == "darwin" and platform_machine == "arm64"

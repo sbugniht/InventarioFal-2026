@@ -154,10 +154,19 @@ function apriArticolo(r) {
   $("#art-sinonimi").value = r ? r.sinonimi : "";
   $("#art-attivo").checked = !r || !!r.attivo;
   $("#articolo-errore").textContent = "";
+  $("#articolo-elimina").classList.toggle("nascosto", !r);
   $("#unita-note").innerHTML = ["Pz", "Ml", "Mq", "Mc", "KG", "Ton"].map(u => `<option value="${u}">`).join("");
   $("#dialogo-articolo").showModal();
 }
 $("#articolo-chiudi").addEventListener("click", () => $("#dialogo-articolo").close());
+$("#articolo-elimina").addEventListener("click", async () => {
+  const r = a.articoloAperto;
+  if (!confirm(`Eliminare l'articolo ${r.codice}? Non si può annullare.`)) return;
+  try {
+    await api(`/api/admin/articoli/${r.id}`, { method: "DELETE" });
+    $("#dialogo-articolo").close(); caricaArticoli();
+  } catch (e) { $("#articolo-errore").textContent = e.message; }
+});
 $("#articolo-salva").addEventListener("click", async () => {
   const dati = { codice: $("#art-codice").value, unita: $("#art-unita").value, descrizione: $("#art-descrizione").value,
                  sinonimi: $("#art-sinonimi").value, attivo: $("#art-attivo").checked, misure_auto: !$("#art-verificate").checked };

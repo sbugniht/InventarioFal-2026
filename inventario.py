@@ -1,8 +1,9 @@
 """Dal testo dettato a una riga di inventario: articolo, quantità, misure, zona, note.
 
 1. Regole (istantanee): parole chiave "pezzi", "spessore", "larghezza", "lunghezza", "trasversali",
-   "sezione 64 per 32", "zona ...", "note ...", con numeri anche in lettere e unità ("300 centimetri").
-   Il resto della frase serve a cercare l'articolo (ricerca.py).
+   "sezione 64 per 32", "zona ...", "note ...", con numeri anche in lettere e unità ("300 centimetri"),
+   e misure "20x12x12" (spessore x larghezza x lunghezza). Il codice dettato, anche a pezzi, sceglie
+   l'articolo; il resto della frase serve a cercarlo (ricerca.py).
 2. Qwen (Ollama): solo se i primi articoli trovati sono troppo vicini, sceglie tra quelli.
 Il risultato NON viene salvato qui: torna al tablet, che lo mostra per conferma."""
 import difflib
@@ -105,6 +106,10 @@ def _a_numero(s: str) -> float | int:
 
 NUMERO = r"(\d+(?:[.,]\d+)*)"
 UNITA_RE = r"(?:\s*(millimetri|millimetro|mm|centimetri|centimetro|cm|metri|metro|mt|ml|m)\b)?"
+PER = r"\s*(?:[x×*]|\bper\b)\s*"
+# "20x12x12", "20 per 12 per 12", "12x20, 12 metri": spessore x larghezza x lunghezza
+MISURE_X = NUMERO + PER + NUMERO + r"(?:" + PER + NUMERO + r"|\s*,?\s*(?:da\s+)?" + NUMERO + \
+    r"\s*(?:metri|metro|mt|m)\b)?"
 
 
 def _valore_iniziale(valore: str):
@@ -137,6 +142,17 @@ def estrai(testo: str, zone: list[dict] = ()) -> dict:
     if nota:
         risultato["note"] = testo[nota.end():].strip(" :,.")
         testo = testo[:nota.start()]
+
+    # Le misure "AxBxC" si mettono da parte (i loro numeri non sono pezzi né valori delle parole chiave)
+    # e tornano nel testo dell'articolo, perché "listelli 3x5" aiuta anche a trovarlo
+    misure_x = []
+
+    def _da_parte(m):
+        if re.search(r"\bsezione\s*$", testo[:m.start()], re.IGNORECASE):
+            return m.group()
+        misure_x.append(m.group())
+        return f" MISURAX{chr(64 + len(misure_x))} "
+    testo = re.sub(MISURE_X, _da_parte, testo, flags=re.IGNORECASE)
 
     trovate = sorted(
         (m.start(), m.end(), campo)
@@ -192,9 +208,17 @@ def estrai(testo: str, zone: list[dict] = ()) -> dict:
         if numero is not None and campo not in detti:
             detti[campo] = (numero, unita)
 
+    # Valgono meno di quelle dette con la parola chiave, e solo dove l'articolo non ha la misura fissa
+    if misure_x:
+        for campo, valore in zip(MISURE, re.findall(NUMERO, misure_x[0])):
+            detti.setdefault(campo, (_a_numero(valore), None, "x"))
+
     # Quello che resta (prima delle parole chiave e dopo i numeri) descrive l'articolo
-    risultato["testo_articolo"] = " ".join(v for c, v in blocchi if c in ("preambolo", "articolo") or c in CAMPI
-                                           or c == "sezione").strip(" ,.;")
+    testo_articolo = " ".join(v for c, v in blocchi if c in ("preambolo", "articolo") or c in CAMPI
+                              or c == "sezione").strip(" ,.;")
+    for i, misura in enumerate(misure_x):
+        testo_articolo = testo_articolo.replace(f"MISURAX{chr(65 + i)}", misura)
+    risultato["testo_articolo"] = testo_articolo
     return risultato
 
 
@@ -220,17 +244,28 @@ def converti(valore, da, a):
     return round(valore * IN_METRI[da] / IN_METRI[a], 4)
 
 
+def unita_detta(campo, valore, unita, s) -> str:
+    """Unità di un valore detto: quella pronunciata, altrimenti quella abituale per il campo.
+    "auto" (travi, vedi misure_articoli.csv): sotto 40 sono cm ("12" = 12 cm), da 40 in su mm ("120")."""
+    origine = unita or s["parlato"][campo]
+    if origine == "auto":
+        origine = "cm" if valore < 40 else "mm"
+    return origine
+
+
 def applica(articolo: dict, detti: dict) -> dict:
     """Valori detti + misure fisse dell'articolo -> campi nelle unità di salvataggio."""
     s = scheda(articolo)
     campi = {c: None for c in CAMPI}
     da_catalogo, conversioni = [], []
-    for campo, (valore, unita) in detti.items():
+    for campo, (valore, unita, *misura_x) in detti.items():
         if campo == "pezzi":
             campi[campo] = valore
             continue
+        if misura_x and campo in s["fisse"]:
+            continue  # "20x150" descrive l'articolo: la misura fissa del catalogo resta
         destinazione = s["salvataggio"][campo]
-        origine = unita or s["parlato"][campo]
+        origine = unita_detta(campo, valore, unita, s)
         campi[campo] = converti(valore, origine, destinazione) if origine != destinazione else valore
         if origine != destinazione:
             conversioni.append(f"{campo}: {valore} {origine} → {campi[campo]} {destinazione}")
@@ -284,23 +319,34 @@ def _bonus_misure(articolo: dict, detti: dict) -> float:
     for campo, fisso in s["fisse"].items():
         if campo not in detti:
             continue
-        valore, unita = detti[campo]
-        origine, destinazione = unita or s["parlato"][campo], s["salvataggio"][campo]
-        detto = converti(valore, origine, destinazione) if origine != destinazione else valore
-        bonus += 4 if abs(detto - fisso) <= 0.01 * max(1, abs(fisso)) else -3
+        valore, unita, *misura_x = detti[campo]
+        origine, destinazione = unita_detta(campo, valore, unita, s), s["salvataggio"][campo]
+        uguale = abs(converti(valore, origine, destinazione) - fisso) <= 0.01 * max(1, abs(fisso))
+        # "3x5" descrive l'articolo e la ricerca la usa già: se non torna non penalizza
+        bonus += 4 if uguale else (0 if misura_x else -3)
     return bonus
 
 
 def analizza(testo: str, indice: ricerca.Indice, zone: list[dict] = ()) -> dict:
-    estratto = estrai(testo, zone)
+    testo_cifre = _numeri_in_cifre(testo.strip())
+    codice = indice.codice_detto(testo_cifre)
+    if codice:
+        # I numeri del codice non sono pezzi né misure: il codice esce dal testo da analizzare
+        inizio, fine = codice[1]
+        testo_cifre = testo_cifre[:inizio] + " " + testo_cifre[fine:]
+    estratto = estrai(testo_cifre, zone)
     candidati = indice.cerca(estratto["testo_articolo"] or testo, n=15)
+    if codice:
+        candidati = [c for c in candidati if c["id"] != codice[0]["id"]]
+        primo = max((c["punteggio"] for c in candidati), default=0) + 20
+        candidati.insert(0, {"punteggio": round(primo, 2), **codice[0]})
     if estratto["detti"]:
         for c in candidati:
             c["punteggio"] = round(c["punteggio"] + _bonus_misure(c, estratto["detti"]), 2)
         candidati.sort(key=lambda c: c["punteggio"], reverse=True)
     candidati = candidati[:6]
-    scelto, metodo, avviso = None, "voce:regole", None
-    if candidati and ricerca.sicuro(candidati):
+    scelto, metodo, avviso = None, "voce:codice" if codice else "voce:regole", None
+    if candidati and (ricerca.sicuro(candidati) or (codice and candidati[0]["id"] == codice[0]["id"])):
         scelto = 0
     elif candidati and CONFIG["llm_attivo"]:
         try:

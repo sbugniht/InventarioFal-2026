@@ -16,7 +16,8 @@ dati/articoli.csv
 *.db-shm
 backup/
 
-# Registrazioni audio: non vanno mai conservate
+# Registrazioni audio: non vanno mai conservate (campioni/: solo l'utente di prova, restano su questo PC)
+campioni/
 *.m4a
 *.wav
 *.webm
