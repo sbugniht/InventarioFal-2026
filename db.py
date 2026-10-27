@@ -41,10 +41,17 @@ CREATE TABLE IF NOT EXISTS articoli (
     attivo INTEGER NOT NULL DEFAULT 1,
     modificato TEXT
 );
+CREATE TABLE IF NOT EXISTS aree (                -- terreni dell'azienda sulla mappa (Magazzino, Uffici, ...)
+    id INTEGER PRIMARY KEY,
+    nome TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    forma TEXT,                                 -- contorno: [[x, y], ...] da 0 a 1 rispetto all'immagine
+    colore TEXT NOT NULL DEFAULT '#2f6fed'
+);
 CREATE TABLE IF NOT EXISTS zone (
     id INTEGER PRIMARY KEY,
     nome TEXT NOT NULL UNIQUE COLLATE NOCASE,
     attiva INTEGER NOT NULL DEFAULT 1
+    -- area_id, forma, colore: aggiunte da _aggiorna_schema
 );
 CREATE TABLE IF NOT EXISTS inventari (
     id INTEGER PRIMARY KEY,
@@ -94,7 +101,18 @@ def connessione() -> sqlite3.Connection:
         _conn.execute("PRAGMA journal_mode=WAL")
         _conn.execute("PRAGMA foreign_keys=ON")
         _conn.executescript(SCHEMA)
+        _aggiorna_schema(_conn)
     return _conn
+
+
+def _aggiorna_schema(conn):
+    """Colonne aggiunte dopo la prima versione: si creano anche nei database già esistenti."""
+    colonne = {r[1] for r in conn.execute("PRAGMA table_info(zone)")}
+    for colonna, tipo in (("area_id", "INTEGER REFERENCES aree(id)"),  # area della mappa
+                          ("forma", "TEXT"),                           # contorno, come aree.forma
+                          ("colore", "TEXT")):
+        if colonna not in colonne:
+            conn.execute(f"ALTER TABLE zone ADD COLUMN {colonna} {tipo}")
 
 
 def tutti(sql, params=()):

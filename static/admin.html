@@ -35,7 +35,8 @@
           <thead><tr>
             <th data-ordina="creata">Data ▾</th><th data-ordina="utente">Utente</th><th data-ordina="zona">Zona</th>
             <th data-ordina="articolo">Articolo</th><th class="num">Pezzi</th><th class="num">Sp. mm</th>
-            <th class="num">Larg. cm</th><th class="num">Lung. m</th><th class="num">Trasv.</th><th>Note</th>
+            <th class="num">Larg. cm</th><th class="num">Lung. m</th><th class="num">Trasv.</th>
+            <th class="num">Quantità</th><th>Note</th>
           </tr></thead>
           <tbody id="righe"></tbody>
         </table>
@@ -82,9 +83,30 @@
 
     <!-- Zone -->
     <section class="scheda nascosto" id="scheda-zone">
+      <p class="tenue nascosto" id="mappa-mancante">Mappa non configurata: manca l'immagine in dati/mappa.</p>
+      <div id="mappa-admin"></div>
+      <div class="filtri nascosto" id="barra-disegno" style="margin-top:10px;align-items:center">
+        <b id="disegno-titolo" style="flex:2 1 220px"></b>
+        <button class="btn" id="disegno-togli">Togli ultimo punto</button>
+        <button class="btn" id="disegno-svuota">Cancella contorno</button>
+        <button class="btn" id="disegno-annulla">Annulla</button>
+        <button class="btn primario" id="disegno-salva">Salva contorno</button>
+      </div>
+      <p class="tenue" style="margin-top:8px">Tocca un'area per ingrandirla. Per disegnare un contorno premi
+        «Disegna», poi tocca gli angoli sulla mappa uno dopo l'altro; i punti si possono trascinare.</p>
+      <p class="errore" id="errore-zone"></p>
+
+      <h2 style="margin-top:16px">Aree</h2>
+      <form class="filtri" id="form-area">
+        <input type="text" id="nuova-area" placeholder="Nome dell'area (es. Magazzino)" required>
+        <button class="btn primario" style="flex:0 0 auto">+ Aggiungi area</button>
+      </form>
+      <div id="aree"></div>
+
+      <h2 style="margin-top:16px">Zone</h2>
       <form class="filtri" id="form-zona">
         <input type="text" id="nuova-zona" placeholder="Nome della zona (es. Polmone)" required>
-        <button class="btn primario" style="flex:0 0 auto">+ Aggiungi</button>
+        <button class="btn primario" style="flex:0 0 auto">+ Aggiungi zona</button>
       </form>
       <div id="zone"></div>
     </section>
@@ -154,6 +176,7 @@
   </dialog>
 
 <script src="/static/comune.js"></script>
+<script src="/static/mappa.js"></script>
 <script src="/static/admin.js"></script>
 </body>
 </html>

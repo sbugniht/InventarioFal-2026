@@ -50,6 +50,10 @@ function formatoNumero(n) {
   if (n === null || n === undefined || n === "") return "";
   return Number(n).toLocaleString("it-IT", { maximumFractionDigits: 3 });
 }
+// Quantità calcolata dal server (m, m², m³): "5,184 m³"; vuota se mancano misure o per i pezzi
+function quantita(r) {
+  return r.quantita === null || r.quantita === undefined ? "" : `${formatoNumero(r.quantita)} ${esc(r.unita_quantita || "")}`.trim();
+}
 function leggiNumero(testo) {
   const t = String(testo ?? "").trim().replace(",", ".");
   if (t === "") return null;

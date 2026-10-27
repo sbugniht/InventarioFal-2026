@@ -172,6 +172,43 @@ tbody tr:hover { background: var(--sfondo); }
 dialog { border: 1px solid var(--bordo); border-radius: var(--raggio); background: var(--carta); color: var(--testo); width: min(600px, 94vw); padding: 20px; }
 dialog::backdrop { background: rgba(0,0,0,0.4); }
 
+/* --- Mappa delle aree e delle zone (mappa.js) --- */
+.mappa { position: relative; width: 100%; height: min(45vh, 440px); background: #2b2f2a;
+         border-radius: var(--raggio); overflow: hidden; touch-action: manipulation; }
+.mappa svg { width: 100%; height: 100%; display: block; }
+.mappa svg.disegno { cursor: crosshair; }
+.mappa-area { fill: var(--colore); fill-opacity: 0.15; stroke: var(--colore); stroke-width: 3;
+              vector-effect: non-scaling-stroke; cursor: pointer; }
+.mappa-area:hover { fill-opacity: 0.3; }
+.mappa-area.aperta { fill-opacity: 0; cursor: default; }
+.mappa-area.chiusa { fill-opacity: 0.05; stroke-opacity: 0.6; }
+.mappa-zona { fill: var(--colore); fill-opacity: 0; stroke: none; pointer-events: none; transition: fill-opacity 0.15s; }
+.mappa-zona.visibile { fill-opacity: 0.25; stroke: var(--colore); stroke-width: 2; vector-effect: non-scaling-stroke;
+                       pointer-events: auto; cursor: pointer; }
+.mappa-zona.accesa, .mappa-zona.scelta { fill-opacity: 0.6; stroke: var(--colore); stroke-width: 2;
+                                         vector-effect: non-scaling-stroke; }
+.mappa-zona.scelta { stroke: #ffffff; stroke-width: 4; }
+.mappa-scritta { fill: #ffffff; stroke: #000000; paint-order: stroke; stroke-linejoin: round;
+                 text-anchor: middle; dominant-baseline: middle; font-weight: 700; }
+.mappa-disegno { fill: var(--colore); fill-opacity: 0.35; stroke: var(--colore); stroke-width: 3;
+                 vector-effect: non-scaling-stroke; pointer-events: none; }
+.mappa-maniglia { fill: #ffffff; stroke: #000000; stroke-width: 2; vector-effect: non-scaling-stroke; cursor: move; }
+.mappa-indietro { position: absolute; top: 8px; left: 8px; }
+.mappa-crediti { position: absolute; right: 6px; bottom: 3px; font-size: 10px; color: #fff; text-shadow: 0 0 3px #000; }
+
+/* Elenco delle zone dell'operatore: si apre dal pulsante in alto, raggruppato per area */
+.scelta-zona { position: relative; }
+.tendina-zone { position: absolute; top: calc(100% + 6px); left: 0; z-index: 10; min-width: 240px; max-height: 60vh;
+                overflow-y: auto; padding: 6px; background: var(--carta); border: 1px solid var(--bordo);
+                border-radius: var(--raggio); box-shadow: 0 8px 24px rgba(0,0,0,0.18); }
+.tendina-zone .gruppo { padding: 8px 10px 2px; font-size: 0.8rem; color: var(--tenue); font-weight: 600; }
+.tendina-zone button { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 6px 10px;
+                       border: none; border-radius: 8px; background: transparent; color: inherit; font: inherit;
+                       text-align: left; cursor: pointer; }
+.tendina-zone button:hover, .tendina-zone button.scelta { background: var(--sfondo); }
+.tendina-zone button.scelta { font-weight: 700; }
+.pallino { width: 14px; height: 14px; border-radius: 50%; flex: 0 0 auto; border: 1px solid rgba(0,0,0,0.25); }
+
 @media (max-width: 600px) {
   body { font-size: 17px; }
   main { padding: 12px; }

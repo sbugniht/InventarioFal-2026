@@ -5,6 +5,7 @@ import datetime
 import io
 import json
 import os
+import re
 import secrets
 import shutil
 import tempfile
@@ -123,7 +124,28 @@ async def pagina_admin(request: Request):
     return _html("admin")
 
 
-FILE_STATICI = {"stile.css", "comune.js", "operatore.js", "admin.js", "sw.js"}
+FILE_STATICI = {"stile.css", "comune.js", "operatore.js", "admin.js", "mappa.js", "sw.js"}
+
+# Mappa: immagine satellitare in dati/mappa (fuori da git) con le sue informazioni in mappa.json
+CARTELLA_MAPPA = os.path.join(BASE_DIR, "dati", "mappa")
+
+
+def info_mappa():
+    """{"immagine", "larghezza", "altezza", "fonte", "crediti"}, oppure None se la mappa non c'è."""
+    try:
+        with open(os.path.join(CARTELLA_MAPPA, "mappa.json"), encoding="utf-8") as f:
+            info = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+    return info if os.path.exists(os.path.join(CARTELLA_MAPPA, info.get("immagine", ""))) else None
+
+
+async def immagine_mappa(request: Request):
+    info = info_mappa()
+    if not info:
+        return Response(status_code=404)
+    # no-cache: si ricontrolla a ogni apertura (se l'immagine cambia arriva subito, altrimenti risponde 304)
+    return FileResponse(os.path.join(CARTELLA_MAPPA, info["immagine"]), headers={"Cache-Control": "no-cache"})
 
 
 async def file_statico(request: Request):
@@ -178,8 +200,35 @@ async def chi_sono(request, u):
 async def catalogo(request, u):
     articoli = [{k: a[k] for k in ("id", "codice", "descrizione", "unita", "spessore", "larghezza", "lunghezza",
                                    "trasversali", "misure_auto")} for a in articoli_inventariabili()]
-    zone = db.tutti("SELECT id, nome FROM zone WHERE attiva = 1 ORDER BY nome")
-    return JSONResponse({"articoli": articoli, "zone": zone, "regole": inventario.REGOLE})
+    zone = [_con_forma(z) for z in
+            db.tutti("SELECT id, nome, area_id, forma, colore FROM zone WHERE attiva = 1 ORDER BY nome")]
+    aree = [_con_forma(a) for a in db.tutti("SELECT * FROM aree ORDER BY nome")]
+    return JSONResponse({"articoli": articoli, "zone": zone, "aree": aree, "mappa": info_mappa(),
+                         "regole": inventario.REGOLE})
+
+
+def _con_forma(r: dict) -> dict:
+    r["forma"] = json.loads(r["forma"]) if r.get("forma") else None
+    return r
+
+
+def _forma(valore):
+    """Contorno disegnato sulla mappa: almeno 3 punti [x, y] tra 0 e 1. None = nessun contorno."""
+    if not valore:
+        return None
+    punti = [[round(float(x), 5), round(float(y), 5)] for x, y in valore]
+    if len(punti) < 3 or not all(0 <= v <= 1 for p in punti for v in p):
+        raise Errore(400, "Contorno non valido: servono almeno 3 punti dentro la mappa")
+    return json.dumps(punti)
+
+
+def _colore(valore, predefinito=None):
+    valore = str(valore or "").strip()
+    if not valore:
+        return predefinito
+    if not re.fullmatch(r"#[0-9a-fA-F]{6}", valore):
+        raise Errore(400, "Colore non valido (es. #2f6fed)")
+    return valore.lower()
 
 
 # --- Voce -----------------------------------------------------------------------
@@ -315,11 +364,23 @@ SELECT_RIGHE = (
     "LEFT JOIN zone z ON z.id = r.zona_id WHERE r.inventario_id IS NULL ")
 
 
+def con_quantita(righe):
+    """Quantità calcolata come nel totale dell'unità (m, m², m³), es. pezzi x lunghezza per i Ml."""
+    for r in righe:
+        r["quantita"] = inventario.totale(r, r)
+        r["unita_quantita"] = inventario.scheda(r)["unita_totale"]
+    return righe
+
+
 @api("operatore")
 async def righe_mie(request, u):
-    oggi = datetime.date.today().isoformat()
-    righe = db.tutti(SELECT_RIGHE + "AND r.utente_id = ? AND r.creata >= ? ORDER BY r.creata DESC", (u["id"], oggi))
-    return JSONResponse(righe)
+    # ?tutte=1: tutte le righe dell'inventario in corso, non solo quelle di oggi
+    if request.query_params.get("tutte") == "1":
+        righe = db.tutti(SELECT_RIGHE + "AND r.utente_id = ? ORDER BY r.creata DESC", (u["id"],))
+    else:
+        oggi = datetime.date.today().isoformat()
+        righe = db.tutti(SELECT_RIGHE + "AND r.utente_id = ? AND r.creata >= ? ORDER BY r.creata DESC", (u["id"], oggi))
+    return JSONResponse(con_quantita(righe))
 
 
 @api("operatore")
@@ -352,7 +413,8 @@ async def admin_righe(request, u):
     if q.get("cerca"):
         filtri += "AND (a.codice LIKE ? OR a.descrizione LIKE ?) "
         params += [f"%{q['cerca']}%"] * 2
-    return JSONResponse(db.tutti(SELECT_RIGHE + filtri + f"ORDER BY {ordine} {verso}, r.creata DESC", params))
+    return JSONResponse(con_quantita(db.tutti(SELECT_RIGHE + filtri + f"ORDER BY {ordine} {verso}, r.creata DESC",
+                                              params)))
 
 
 @api("admin")
@@ -463,16 +525,83 @@ async def admin_articoli(request, u):
 @api("admin")
 async def admin_zone(request, u):
     if request.method == "GET":
-        return JSONResponse(db.tutti("SELECT * FROM zone ORDER BY attiva DESC, nome"))
+        return JSONResponse([_con_forma(z) for z in db.tutti("SELECT * FROM zone ORDER BY attiva DESC, nome")])
     dati = await request.json()
     if "id" in request.path_params:
-        db.esegui("UPDATE zone SET attiva = ? WHERE id = ?",
-                  (1 if dati.get("attiva") else 0, int(request.path_params["id"])))
+        # Si cambia solo quello che arriva: attiva, nome, area, contorno, colore
+        zona_id = int(request.path_params["id"])
+        modifiche = {}
+        if "attiva" in dati:
+            modifiche["attiva"] = 1 if dati["attiva"] else 0
+        if "nome" in dati:
+            nome = str(dati["nome"] or "").strip()
+            if not nome:
+                raise Errore(400, "Nome della zona mancante")
+            altra = db.uno("SELECT id FROM zone WHERE nome = ? AND id != ?", (nome, zona_id))
+            if altra:
+                raise Errore(400, "Esiste già una zona con questo nome")
+            modifiche["nome"] = nome
+        if "area_id" in dati:
+            area_id = int(dati["area_id"]) if dati["area_id"] else None
+            if area_id and not db.uno("SELECT id FROM aree WHERE id = ?", (area_id,)):
+                raise Errore(400, "Area inesistente")
+            modifiche["area_id"] = area_id
+        if "forma" in dati:
+            modifiche["forma"] = _forma(dati["forma"])
+        if "colore" in dati:
+            modifiche["colore"] = _colore(dati["colore"])
+        if modifiche:
+            db.esegui(f"UPDATE zone SET {', '.join(f'{c} = ?' for c in modifiche)} WHERE id = ?",
+                      (*modifiche.values(), zona_id))
     else:
         nome = str(dati.get("nome") or "").strip()
         if not nome:
             raise Errore(400, "Nome della zona mancante")
         db.esegui("INSERT INTO zone (nome) VALUES (?) ON CONFLICT(nome) DO UPDATE SET attiva = 1", (nome,))
+    return JSONResponse({"ok": True})
+
+
+@api("admin")
+async def admin_mappa(request, u):
+    return JSONResponse(info_mappa())
+
+
+@api("admin")
+async def admin_aree(request, u):
+    """Aree della mappa (i terreni): contengono le zone."""
+    if request.method == "GET":
+        return JSONResponse([_con_forma(a) for a in db.tutti("SELECT * FROM aree ORDER BY nome")])
+    area_id = request.path_params.get("id")
+    if request.method == "DELETE":
+        # Le zone restano: tornano senza area
+        db.esegui("UPDATE zone SET area_id = NULL WHERE area_id = ?", (int(area_id),))
+        db.esegui("DELETE FROM aree WHERE id = ?", (int(area_id),))
+        return JSONResponse({"ok": True})
+    dati = await request.json()
+    if area_id is None:
+        nome = str(dati.get("nome") or "").strip()
+        if not nome:
+            raise Errore(400, "Nome dell'area mancante")
+        if db.uno("SELECT id FROM aree WHERE nome = ?", (nome,)):
+            raise Errore(400, "Esiste già un'area con questo nome")
+        db.esegui("INSERT INTO aree (nome, forma, colore) VALUES (?, ?, ?)",
+                  (nome, _forma(dati.get("forma")), _colore(dati.get("colore"), "#2f6fed")))
+        return JSONResponse({"ok": True})
+    modifiche = {}
+    if "nome" in dati:
+        nome = str(dati["nome"] or "").strip()
+        if not nome:
+            raise Errore(400, "Nome dell'area mancante")
+        if db.uno("SELECT id FROM aree WHERE nome = ? AND id != ?", (nome, int(area_id))):
+            raise Errore(400, "Esiste già un'area con questo nome")
+        modifiche["nome"] = nome
+    if "forma" in dati:
+        modifiche["forma"] = _forma(dati["forma"])
+    if "colore" in dati:
+        modifiche["colore"] = _colore(dati["colore"], "#2f6fed")
+    if modifiche:
+        db.esegui(f"UPDATE aree SET {', '.join(f'{c} = ?' for c in modifiche)} WHERE id = ?",
+                  (*modifiche.values(), int(area_id)))
     return JSONResponse({"ok": True})
 
 
@@ -494,29 +623,31 @@ def _csv(nome_file, intestazione, righe):
 @api("admin")
 async def admin_export(request, u):
     oggi = datetime.date.today().isoformat()
-    righe = db.tutti(SELECT_RIGHE + "ORDER BY a.codice, r.creata")
+    righe = con_quantita(db.tutti(SELECT_RIGHE + "ORDER BY a.codice, r.creata"))
     if request.path_params["tipo"] == "righe":
         return _csv(f"inventario-righe-{oggi}.csv",
                     ["Data", "Utente", "Zona", "Codice", "Descrizione", "Unità", "Pezzi", "Spessore (mm)",
-                     "Larghezza (cm)", "Lunghezza (m)", "Trasversali (m)", "Totale", "Note"],
+                     "Larghezza (cm)", "Lunghezza (m)", "Trasversali (m)", "Quantità", "Unità quantità", "Note"],
                     [[r["creata"].replace("T", " "), r["utente"], r["zona"], r["codice"], r["descrizione"], r["unita"],
                       r["pezzi"], r["spessore"], r["larghezza"], r["lunghezza"], r["trasversali"],
-                      inventario.totale(r, r), r["note"]] for r in righe])
+                      r["quantita"], r["unita_quantita"] if r["quantita"] is not None else "", r["note"]]
+                     for r in righe])
     # Totali per articolo
     totali = {}
     for r in righe:
         t = totali.setdefault(r["articolo_id"], {"r": r, "righe": 0, "pezzi": 0.0, "totale": 0.0, "senza_totale": 0})
         t["righe"] += 1
         t["pezzi"] += r["pezzi"] or 0
-        tot = inventario.totale(r, r)
-        if tot is None:
+        if r["quantita"] is None:
             t["senza_totale"] += 1
         else:
-            t["totale"] += tot
+            t["totale"] += r["quantita"]
     return _csv(f"inventario-totali-{oggi}.csv",
-                ["Codice", "Descrizione", "Unità", "Righe", "Pezzi totali", "Quantità totale", "Righe senza misure"],
+                ["Codice", "Descrizione", "Unità", "Righe", "Pezzi totali", "Quantità totale", "Unità quantità",
+                 "Righe senza misure"],
                 [[t["r"]["codice"], t["r"]["descrizione"], t["r"]["unita"], t["righe"], round(t["pezzi"], 3),
-                  round(t["totale"], 4) if inventario.scheda(t["r"])["totale"] else None, t["senza_totale"]]
+                  *((round(t["totale"], 4), t["r"]["unita_quantita"]) if inventario.scheda(t["r"])["totale"]
+                    else (None, "")), t["senza_totale"]]
                  for t in totali.values()])
 
 
@@ -568,6 +699,10 @@ ROUTES = [
     Route("/api/admin/articoli/{id:int}", admin_articoli, methods=["PUT", "DELETE"]),
     Route("/api/admin/zone", admin_zone, methods=["GET", "POST"]),
     Route("/api/admin/zone/{id:int}", admin_zone, methods=["PUT"]),
+    Route("/api/admin/aree", admin_aree, methods=["GET", "POST"]),
+    Route("/api/admin/aree/{id:int}", admin_aree, methods=["PUT", "DELETE"]),
+    Route("/api/admin/mappa", admin_mappa),
+    Route("/mappa/immagine", immagine_mappa),
     Route("/api/admin/export/{tipo:str}", admin_export),
     Route("/api/admin/chiudi", admin_chiudi, methods=["POST"]),
 ]

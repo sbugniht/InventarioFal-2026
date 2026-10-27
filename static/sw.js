@@ -1,7 +1,10 @@
 // Service worker: tiene una copia delle pagine per aprirle anche senza rete.
 // Prima prova la rete (così gli aggiornamenti arrivano subito), se manca usa la copia.
-const CACHE = "inventario-v1";
-const PAGINE = ["/login", "/operatore", "/static/stile.css", "/static/comune.js", "/static/operatore.js"];
+const CACHE = "inventario-v2";
+const PAGINE = ["/login", "/operatore", "/static/stile.css", "/static/comune.js", "/static/operatore.js",
+                "/static/mappa.js"];
+// La mappa può mancare (dati/mappa non configurata): si tiene in copia quando c'è, ma non all'installazione
+const FACOLTATIVE = ["/mappa/immagine"];
 
 self.addEventListener("install", evento => {
   evento.waitUntil(caches.open(CACHE).then(c => c.addAll(PAGINE)).then(() => self.skipWaiting()));
@@ -19,7 +22,7 @@ self.addEventListener("fetch", evento => {
   const url = new URL(evento.request.url);
   // Le API non si mettono in cache: i dati arrivano sempre dal server (o dalla coda del tablet)
   if (evento.request.method !== "GET" || url.pathname.startsWith("/api/")) return;
-  if (!PAGINE.includes(url.pathname)) return;
+  if (!PAGINE.includes(url.pathname) && !FACOLTATIVE.includes(url.pathname)) return;
   evento.respondWith(
     fetch(evento.request)
       .then(risposta => {

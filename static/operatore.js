@@ -42,17 +42,66 @@ async function avvio() {
   aggiornaOggi();
 }
 
+// --- Zona: elenco per area + mappa (mappa.js) -----------------------------------------
+// Il <select id="zona"> nascosto tiene il valore (lo leggono il salvataggio e la voce);
+// l'elenco e la mappa lo cambiano tramite impostaZona.
+let mappa = null;
+
 function riempiZone() {
   const attuale = memoria.leggi("zona");
   $("#zona").innerHTML = `<option value="">—</option>` +
     catalogo.zone.map(z => `<option value="${z.id}">${esc(z.nome)}</option>`).join("");
   $("#zona").value = attuale && catalogo.zone.some(z => z.id === attuale) ? String(attuale) : "";
+  const aree = catalogo.aree || [];
+  // Raggruppate per area, nell'ordine delle aree; poi quelle senza area
+  const gruppi = [...aree.map(ar => [ar.nome, catalogo.zone.filter(z => z.area_id === ar.id)]),
+                  [aree.length ? "Altre zone" : "", catalogo.zone.filter(z => !aree.some(ar => ar.id === z.area_id))]]
+    .filter(([, zone]) => zone.length);
+  $("#zona-tendina").innerHTML = `<button role="option" data-zona="">— nessuna zona</button>` +
+    gruppi.map(([nome, zone]) => (nome ? `<div class="gruppo">${esc(nome)}</div>` : "") + zone.map(z =>
+      `<button role="option" data-zona="${z.id}"><span class="pallino" style="background:${esc(coloreZona(z))}"></span>${esc(z.nome)}</button>`
+    ).join("")).join("");
+  if (catalogo.mappa) {
+    $("#scheda-mappa").classList.remove("nascosto");
+    if (mappa) mappa.aggiorna(aree, catalogo.zone);
+    else mappa = new Mappa($("#mappa-operatore"), { info: catalogo.mappa, aree, zone: catalogo.zone,
+                                                    scegliZona: id => impostaZona(id) });
+  }
+  mostraZona();
 }
-$("#zona").addEventListener("change", () => memoria.scrivi("zona", Number($("#zona").value) || null));
+function mostraZona() {
+  const id = Number($("#zona").value) || null;
+  const z = catalogo.zone.find(z => z.id === id);
+  $("#zona-bottone").textContent = `Zona: ${z ? z.nome : "—"} ▾`;
+  document.querySelectorAll("#zona-tendina button").forEach(b => b.classList.toggle("scelta", Number(b.dataset.zona) === id));
+  mappa?.scegli(id);
+}
 function impostaZona(id) {
   $("#zona").value = id ? String(id) : "";
   memoria.scrivi("zona", id || null);
+  mostraZona();
 }
+
+function apriTendina(aperta) {
+  $("#zona-tendina").classList.toggle("nascosto", !aperta);
+  $("#zona-bottone").setAttribute("aria-expanded", aperta);
+  if (!aperta) mappa?.accendi(null);
+}
+$("#zona-bottone").addEventListener("click", () => apriTendina($("#zona-tendina").classList.contains("nascosto")));
+$("#zona-tendina").addEventListener("click", e => {
+  const b = e.target.closest("button[data-zona]");
+  if (!b) return;
+  impostaZona(Number(b.dataset.zona) || null);
+  apriTendina(false);
+});
+// Passando sopra a una voce (PC) la zona si accende sulla mappa; sul tablet si accende quando la si sceglie
+$("#zona-tendina").addEventListener("pointerover", e => {
+  const b = e.target.closest("button[data-zona]");
+  if (b && e.pointerType === "mouse") mappa?.accendi(Number(b.dataset.zona) || null);
+});
+$("#zona-tendina").addEventListener("pointerleave", () => mappa?.accendi(null));
+document.addEventListener("click", e => { if (!e.target.closest(".scelta-zona")) apriTendina(false); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") apriTendina(false); });
 
 // --- Il pulsante grande ----------------------------------------------------------
 function fase(nuova, messaggio) {
@@ -386,21 +435,38 @@ function aggiornaCoda() {
 setInterval(inviaCoda, 15000);
 window.addEventListener("online", inviaCoda);
 
-// --- Righe di oggi --------------------------------------------------------------------
+// --- Righe di oggi (o di tutti i giorni dell'inventario in corso) ------------------------
+let tutteLeRighe = memoria.leggi("tutte_le_righe", false);
+function mostraPeriodo() {
+  $("#periodo").textContent = tutteLeRighe ? "📅 Tutti i giorni" : "📅 Oggi";
+  $("#titolo-righe").textContent = tutteLeRighe ? "Le tue righe di tutti i giorni" : "Le tue righe di oggi";
+}
+mostraPeriodo();
+$("#periodo").addEventListener("click", () => {
+  tutteLeRighe = !tutteLeRighe;
+  memoria.scrivi("tutte_le_righe", tutteLeRighe);
+  mostraPeriodo();
+  aggiornaOggi();
+});
+
 async function aggiornaOggi() {
-  let righe = memoria.leggi("oggi", []);
+  const tutte = tutteLeRighe, chiave = tutte ? "tutte" : "oggi";
+  let righe = memoria.leggi(chiave, []);
   try {
-    righe = await api("/api/righe/mie");
-    memoria.scrivi("oggi", righe);
+    righe = await api("/api/righe/mie" + (tutte ? "?tutte=1" : ""));
+    memoria.scrivi(chiave, righe);
   } catch { /* senza rete: ultima copia */ }
+  if (tutte !== tutteLeRighe) return;  // nel frattempo si è cambiato periodo
+  // Di tutti i giorni serve anche la data: "27/10 14:32"
+  const quando = c => (tutte ? `${c.slice(8, 10)}/${c.slice(5, 7)} ` : "") + c.slice(11, 16);
   const inAttesa = memoria.leggi("coda", []).filter(r => r.utente_id === s.io.id);
   const html = [
     ...inAttesa.map(r => `<div class="riga-elenco">
       <div class="testo"><span class="etichetta">${r.errore ? "errore: " + esc(r.errore) : "in attesa"}</span>
-        ${esc(r.creata.slice(11, 16))} <b>${esc(r._etichetta || "")}</b><br>${riassunto(r)}</div>
+        ${esc(quando(r.creata))} <b>${esc(r._etichetta || "")}</b><br>${riassunto(r)}</div>
       <button class="btn piccolo pericolo" data-elimina-coda="${esc(r.id)}">Elimina</button></div>`),
     ...righe.map(r => `<div class="riga-elenco">
-      <div class="testo">${esc(r.creata.slice(11, 16))} <b>${esc(r.codice)}</b> ${esc(r.descrizione)}<br>${riassunto(r)}${r.zona ? " · " + esc(r.zona) : ""}</div>
+      <div class="testo">${esc(quando(r.creata))} <b>${esc(r.codice)}</b> ${esc(r.descrizione)}<br>${riassunto(r)}${r.zona ? " · " + esc(r.zona) : ""}</div>
       <button class="btn piccolo" data-modifica="${esc(r.id)}">Modifica</button>
       <button class="btn piccolo pericolo" data-elimina="${esc(r.id)}">Elimina</button></div>`),
   ];
@@ -412,6 +478,7 @@ function riassunto(r) {
   if (r.pezzi !== null) parti.push(`${formatoNumero(r.pezzi)} pz`);
   const misure = ["spessore", "larghezza", "lunghezza"].filter(c => r[c] !== null).map(c => formatoNumero(r[c]));
   if (misure.length) parti.push(misure.join(" × "));
+  if (quantita(r)) parti.push(`<b>= ${quantita(r)}</b>`);
   if (r.note) parti.push(esc(r.note));
   return `<span class="tenue">${parti.join(" · ")}</span>`;
 }
@@ -430,7 +497,7 @@ $("#oggi").addEventListener("click", async e => {
     aggiornaOggi();
   } else if (b.dataset.modifica) {
     if (s.fase !== "pronto") { lampo("Prima salva o scarta la riga in corso", true); return; }
-    const r = memoria.leggi("oggi", []).find(x => x.id === b.dataset.modifica);
+    const r = memoria.leggi(tutteLeRighe ? "tutte" : "oggi", []).find(x => x.id === b.dataset.modifica);
     if (!r) return;
     nuovaVerifica();
     s.modifica = r.id;

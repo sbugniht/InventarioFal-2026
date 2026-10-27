@@ -73,7 +73,8 @@ async function caricaRighe() {
       <td>${esc(r.utente)}</td><td>${esc(r.zona || "")}</td>
       <td><b>${esc(r.codice)}</b> ${esc(r.descrizione)}</td>
       ${CAMPI.map(c => `<td class="num">${formatoNumero(r[c])}</td>`).join("")}
-      <td>${esc(r.note)}</td></tr>`).join("") || `<tr><td colspan="10" class="tenue">Nessuna riga.</td></tr>`;
+      <td class="num">${quantita(r)}</td>
+      <td>${esc(r.note)}</td></tr>`).join("") || `<tr><td colspan="11" class="tenue">Nessuna riga.</td></tr>`;
   document.querySelectorAll("th[data-ordina]").forEach(th => {
     th.textContent = th.textContent.replace(/ [▴▾]$/, "") + (th.dataset.ordina === a.ordina ? (a.verso === "asc" ? " ▴" : " ▾") : "");
   });
@@ -256,24 +257,124 @@ $("#utenti").addEventListener("click", async e => {
   } catch (err) { $("#errore-utenti").textContent = err.message; }
 });
 
-// --- Zone ----------------------------------------------------------------------------
+// --- Zone e aree sulla mappa (mappa.js) ---------------------------------------------------
+let mappaAdmin = null, aree = [], disegno = null;  // disegno: { tipo: "aree" | "zone", id, controllo }
+
 async function caricaZone() {
-  a.zone = await api("/api/admin/zone");
-  $("#zone").innerHTML = a.zone.map(z => `<div class="riga-elenco">
-      <div class="testo">${esc(z.nome)}${z.attiva ? "" : ' <span class="tenue">· disattivata</span>'}</div>
+  let info;
+  [a.zone, aree, info] = await Promise.all([api("/api/admin/zone"), api("/api/admin/aree"), api("/api/admin/mappa")]);
+  const zoneSullaMappa = a.zone.filter(z => z.attiva);
+  $("#mappa-mancante").classList.toggle("nascosto", !!info);
+  if (info && !mappaAdmin) {
+    mappaAdmin = new Mappa($("#mappa-admin"), { info, aree, zone: zoneSullaMappa, scegliZona: id => mappaAdmin.scegli(id) });
+    $("#mappa-admin").style.height = "min(65vh, 640px)";
+  } else if (mappaAdmin) {
+    mappaAdmin.aggiorna(aree, zoneSullaMappa);
+  }
+  $("#aree").innerHTML = aree.map(ar => `<div class="riga-elenco" data-riga-area="${ar.id}">
+      <div class="testo"><span class="pallino" style="display:inline-block;background:${esc(ar.colore)}"></span>
+        <b>${esc(ar.nome)}</b> <span class="tenue">· ${a.zone.filter(z => z.area_id === ar.id).length} zone${ar.forma ? "" : " · senza contorno"}</span></div>
+      <input type="color" value="${esc(ar.colore)}" data-colore-area="${ar.id}" title="Colore" style="width:48px;min-height:40px;padding:2px">
+      <button class="btn piccolo" data-disegna-area="${ar.id}">${ar.forma ? "Ridisegna" : "Disegna"}</button>
+      <button class="btn piccolo pericolo" data-elimina-area="${ar.id}">Elimina</button>
+    </div>`).join("") || `<span class="tenue">Nessuna area.</span>`;
+  const opzioniAree = id => `<option value="">— nessuna area —</option>` +
+    aree.map(ar => `<option value="${ar.id}"${ar.id === id ? " selected" : ""}>${esc(ar.nome)}</option>`).join("");
+  $("#zone").innerHTML = a.zone.map(z => `<div class="riga-elenco" data-riga-zona="${z.id}">
+      <div class="testo"><b>${esc(z.nome)}</b>${z.attiva ? "" : ' <span class="tenue">· disattivata</span>'}${z.forma ? "" : ' <span class="tenue">· senza contorno</span>'}</div>
+      <select data-area-zona="${z.id}" style="width:auto;flex:0 1 180px">${opzioniAree(z.area_id)}</select>
+      <input type="color" value="${esc(coloreZona(z))}" data-colore-zona="${z.id}" title="Colore" style="width:48px;min-height:40px;padding:2px">
+      <button class="btn piccolo" data-disegna-zona="${z.id}">${z.forma ? "Ridisegna" : "Disegna"}</button>
       <button class="btn piccolo" data-zona="${z.id}" data-attiva="${z.attiva ? 0 : 1}">${z.attiva ? "Disattiva" : "Riattiva"}</button>
     </div>`).join("");
 }
+
+async function modifica(url, dati) {
+  $("#errore-zone").textContent = "";
+  try { await api(url, { method: "PUT", json: dati }); }
+  catch (e) { $("#errore-zone").textContent = e.message; }
+  caricaZone();
+}
+
 $("#form-zona").addEventListener("submit", async e => {
   e.preventDefault();
   await api("/api/admin/zone", { json: { nome: $("#nuova-zona").value } });
   $("#form-zona").reset(); caricaZone();
 });
-$("#zone").addEventListener("click", async e => {
-  const b = e.target.closest("button[data-zona]");
-  if (!b) return;
-  await api(`/api/admin/zone/${b.dataset.zona}`, { method: "PUT", json: { attiva: b.dataset.attiva === "1" } });
+$("#form-area").addEventListener("submit", async e => {
+  e.preventDefault();
+  $("#errore-zone").textContent = "";
+  try {
+    await api("/api/admin/aree", { json: { nome: $("#nuova-area").value } });
+    $("#form-area").reset();
+  } catch (err) { $("#errore-zone").textContent = err.message; }
   caricaZone();
+});
+
+$("#zone").addEventListener("click", async e => {
+  const b = e.target.closest("button");
+  const riga = e.target.closest("[data-riga-zona]");
+  if (b?.dataset.zona) {
+    modifica(`/api/admin/zone/${b.dataset.zona}`, { attiva: b.dataset.attiva === "1" });
+  } else if (b?.dataset.disegnaZona) {
+    const z = a.zone.find(z => z.id === Number(b.dataset.disegnaZona));
+    if (z.area_id) mappaAdmin?.apriArea(z.area_id);
+    iniziaDisegno("zone", z, b.closest(".riga-elenco").querySelector("input[type=color]").value);
+  } else if (riga && !e.target.closest("select, input") && mappaAdmin) {
+    mappaAdmin.scegli(Number(riga.dataset.rigaZona));  // tocca la riga: la zona si accende sulla mappa
+  }
+});
+$("#zone").addEventListener("change", e => {
+  const t = e.target;
+  if (t.dataset.areaZona) modifica(`/api/admin/zone/${t.dataset.areaZona}`, { area_id: Number(t.value) || null });
+  if (t.dataset.coloreZona) modifica(`/api/admin/zone/${t.dataset.coloreZona}`, { colore: t.value });
+});
+$("#aree").addEventListener("click", async e => {
+  const b = e.target.closest("button");
+  const riga = e.target.closest("[data-riga-area]");
+  if (b?.dataset.eliminaArea) {
+    const ar = aree.find(x => x.id === Number(b.dataset.eliminaArea));
+    if (!confirm(`Eliminare l'area ${ar.nome}? Le sue zone restano, senza area.`)) return;
+    await api(`/api/admin/aree/${ar.id}`, { method: "DELETE" });
+    caricaZone();
+  } else if (b?.dataset.disegnaArea) {
+    const ar = aree.find(x => x.id === Number(b.dataset.disegnaArea));
+    mappaAdmin?.mostraTutto();
+    iniziaDisegno("aree", ar, ar.colore);
+  } else if (riga && !e.target.closest("input") && mappaAdmin) {
+    mappaAdmin.apriArea(Number(riga.dataset.rigaArea));
+  }
+});
+$("#aree").addEventListener("change", e => {
+  if (e.target.dataset.coloreArea) modifica(`/api/admin/aree/${e.target.dataset.coloreArea}`, { colore: e.target.value });
+});
+
+// Disegno di un contorno: punti toccati sulla mappa, salvati con «Salva contorno»
+function iniziaDisegno(tipo, oggetto, colore) {
+  if (!mappaAdmin) return;
+  disegno = { tipo, id: oggetto.id, controllo: mappaAdmin.disegnaContorno({ iniziale: oggetto.forma, colore }) };
+  $("#disegno-titolo").textContent = `Contorno di ${oggetto.nome}: tocca gli angoli sulla mappa`;
+  $("#barra-disegno").classList.remove("nascosto");
+  $("#mappa-admin").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+function fineDisegno() {
+  mappaAdmin?.chiudiDisegno();
+  disegno = null;
+  $("#barra-disegno").classList.add("nascosto");
+}
+$("#disegno-togli").addEventListener("click", () => disegno?.controllo.togliUltimo());
+$("#disegno-svuota").addEventListener("click", () => {
+  if (!disegno) return;
+  while (disegno.controllo.punti().length) disegno.controllo.togliUltimo();
+});
+$("#disegno-annulla").addEventListener("click", fineDisegno);
+$("#disegno-salva").addEventListener("click", async () => {
+  if (!disegno) return;
+  const punti = disegno.controllo.punti();
+  if (punti.length && punti.length < 3) { $("#errore-zone").textContent = "Servono almeno 3 punti (o nessuno per togliere il contorno)"; return; }
+  const { tipo, id } = disegno;
+  fineDisegno();
+  await modifica(`/api/admin/${tipo}/${id}`, { forma: punti.length ? punti : null });
 });
 
 // --- Chiusura dell'inventario ------------------------------------------------------------

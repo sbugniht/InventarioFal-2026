@@ -11,6 +11,8 @@ config.json
 
 # Dati aziendali e database: restano sul PC e sul NAS
 dati/articoli.csv
+# Immagine satellitare (Esri): solo per uso interno, non va pubblicata
+dati/mappa/
 *.db
 *.db-wal
 *.db-shm

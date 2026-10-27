@@ -9,15 +9,24 @@
 <body>
   <div class="barra">
     <span class="titolo">Inventario</span>
-    <label class="chip" for="zona" style="margin:0">Zona
-      <select id="zona" style="min-height:36px;width:auto;border:none;padding:0 4px;background:transparent"></select>
-    </label>
+    <!-- Zona: elenco a tendina per area; passando sopra a una voce la zona si accende sulla mappa -->
+    <div class="scelta-zona">
+      <button class="chip" id="zona-bottone" aria-haspopup="listbox" aria-expanded="false"
+              style="cursor:pointer;font:inherit;color:inherit">Zona: — ▾</button>
+      <div class="tendina-zone nascosto" id="zona-tendina" role="listbox"></div>
+      <select id="zona" class="nascosto" aria-hidden="true"></select>
+    </div>
+    <button class="chip" id="periodo" title="Righe mostrate: solo di oggi o di tutti i giorni dell'inventario in corso"
+            style="cursor:pointer;font:inherit;color:inherit">📅 Oggi</button>
     <span class="chip ok" id="coda" title="Righe salvate sul tablet e non ancora inviate al server">✓ inviato</span>
     <span class="chip" id="nome"></span>
     <button class="btn piccolo" id="esci">Esci</button>
   </div>
 
   <main>
+    <section class="scheda nascosto" id="scheda-mappa" style="padding:8px">
+      <div id="mappa-operatore"></div>
+    </section>
     <section class="scheda">
       <button class="grande" id="grande">🎤 Registra</button>
       <div class="stato" id="stato">Premi Registra e di' articolo, quantità e misure.</div>
@@ -51,7 +60,7 @@
     </section>
 
     <section class="scheda">
-      <h2>Le tue righe di oggi</h2>
+      <h2 id="titolo-righe">Le tue righe di oggi</h2>
       <div id="oggi"><span class="tenue">Nessuna riga.</span></div>
     </section>
   </main>
@@ -68,6 +77,7 @@
   </dialog>
 
 <script src="/static/comune.js"></script>
+<script src="/static/mappa.js"></script>
 <script src="/static/operatore.js"></script>
 </body>
 </html>
